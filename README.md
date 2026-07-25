@@ -76,7 +76,9 @@ brew install --HEAD neutrospec/tap/canopy
 이 저장소는 canopy의 Homebrew 포뮬러(`Formula/canopy.rb`)만 담습니다. 포뮬러의
 원본(source of truth)은 canopy 저장소의
 [`packaging/homebrew/canopy.rb`](https://github.com/neutrospec/canopy/blob/main/packaging/homebrew/canopy.rb)이며,
-릴리스마다 여기로 동기화됩니다.
+릴리스 워크플로우가 매 릴리스마다 여기로 동기화합니다 — `Formula/canopy.rb`를 손으로
+고치지 마세요(다음 릴리스가 덮어씁니다). 릴리스·유지보수 방법은
+[canopy의 Homebrew 가이드](https://github.com/neutrospec/canopy/blob/main/docs/homebrew-guide.md)에 있습니다.
 
 canopy와 이 포뮬러의 코드 대부분은 **AI 지원 코딩**(Claude Code)으로 작성되었습니다 —
 방향과 판단은 사람이, 구현·검증은 AI가 맡는 방식입니다. 자세한 배경은 canopy 저장소의

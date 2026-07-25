@@ -1,0 +1,26 @@
+name: audit
+
+# Validate Formula/canopy.rb on every push (including the release bot's
+# auto-bump from the canopy repo) and on PRs. Style + audit only — no full
+# build — so it stays fast. `--online` re-verifies the url and sha256s.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Homebrew/actions/setup-homebrew@master
+      - name: Link this checkout in as the neutrospec/tap tap
+        run: |
+          set -euo pipefail
+          taps="$(brew --repository)/Library/Taps/neutrospec"
+          mkdir -p "$taps"
+          ln -sf "$GITHUB_WORKSPACE" "$taps/homebrew-tap"
+      - name: brew style
+        run: brew style neutrospec/tap/canopy
+      - name: brew audit
+        run: brew audit --strict --online neutrospec/tap/canopy
