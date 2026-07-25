@@ -73,7 +73,7 @@ class Canopy < Formula
         canopy model pull
       Keyword search works without it. If the ONNX Runtime library is not found
       automatically (e.g. Linuxbrew or a non-standard prefix), point canopy at it:
-        export CANOPY_ONNXRUNTIME_DIR="#{Formula["onnxruntime"].opt_lib}"
+        export CANOPY_ONNXRUNTIME_DIR="#{formula_opt_lib("onnxruntime")}"
     EOS
   end
 
