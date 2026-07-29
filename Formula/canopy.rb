@@ -16,9 +16,6 @@ class Canopy < Formula
   url "https://github.com/neutrospec/canopy/archive/refs/tags/v0.3.0.tar.gz"
   sha256 "fb9a1a58a79c4607183f342a7968b65496401a2c33fb466f2dc8670e3f7389d5"
   license "MIT"
-  # Bump on formula-only changes that alter the install (same upstream tarball).
-  # rev 1: added the `service` block (brew services support).
-  revision 1
   head "https://github.com/neutrospec/canopy.git", branch: "main"
 
   depends_on "go" => :build
