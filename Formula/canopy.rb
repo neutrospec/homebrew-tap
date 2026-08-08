@@ -13,8 +13,8 @@
 class Canopy < Formula
   desc "Local knowledge manager for markdown wikis: schema, hybrid search, web UI"
   homepage "https://github.com/neutrospec/canopy"
-  url "https://github.com/neutrospec/canopy/archive/refs/tags/v0.9.0.tar.gz"
-  sha256 "5b59bc0d63d21d208e1ea91003251db39ed7a851d7815d2cd080c660e1788409"
+  url "https://github.com/neutrospec/canopy/archive/refs/tags/v0.9.1.tar.gz"
+  sha256 "2a1df6e36d8ff584f31a391f2aa0a8e6f45522a37076a14489f31fad5bf313d0"
   license "MIT"
   head "https://github.com/neutrospec/canopy.git", branch: "main"
 
