@@ -13,8 +13,8 @@
 class Canopy < Formula
   desc "Local knowledge manager for markdown wikis: schema, hybrid search, web UI"
   homepage "https://github.com/neutrospec/canopy"
-  url "https://github.com/neutrospec/canopy/archive/refs/tags/v0.11.1.tar.gz"
-  sha256 "57c5511a183928f1478f3ce2ecd29ce161d5be13baf497f77b8898c3c055925d"
+  url "https://github.com/neutrospec/canopy/archive/refs/tags/v0.12.0.tar.gz"
+  sha256 "b8f19142cf3931b781bee23d1cf746ebe7f7a0ab464d6f1245404d6b59d43836"
   license "MIT"
   head "https://github.com/neutrospec/canopy.git", branch: "main"
 
@@ -95,6 +95,11 @@ class Canopy < Formula
 
       To run the web UI as a background service (http://localhost:8737):
         brew services start canopy
+      Server options persist in [serve] in the same config.toml:
+        addr, auth_token_file (absolute path), public_origin, allow_hosts.
+      For a private reverse proxy, see:
+        https://github.com/neutrospec/canopy/blob/main/docs/proxy-auth.md
+      Restart the service after configuration or token changes.
       It serves the wiki named by default_wiki. Adopt your wiki first:
         canopy init --wiki /path/to/wiki
       If a default already exists, edit default_wiki in your canopy config
