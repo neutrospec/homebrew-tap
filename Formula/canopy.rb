@@ -13,8 +13,8 @@
 class Canopy < Formula
   desc "Local knowledge manager for markdown wikis: schema, hybrid search, web UI"
   homepage "https://github.com/neutrospec/canopy"
-  url "https://github.com/neutrospec/canopy/archive/refs/tags/v0.12.0.tar.gz"
-  sha256 "b8f19142cf3931b781bee23d1cf746ebe7f7a0ab464d6f1245404d6b59d43836"
+  url "https://github.com/neutrospec/canopy/archive/refs/tags/v0.13.0.tar.gz"
+  sha256 "d33e096b4af01d0aad6cbaec53320d863577ba94d16caf448432848ea5bf7bdb"
   license "MIT"
   head "https://github.com/neutrospec/canopy.git", branch: "main"
 
@@ -87,9 +87,11 @@ class Canopy < Formula
 
   def caveats
     <<~EOS
-      Semantic search uses a local bge-m3 ONNX model (~2.3GB). Download it once:
+      Built-in semantic search uses a local bge-m3 ONNX model (~2.3GB). Download it once:
         canopy model pull
-      Keyword search works without it. If the ONNX Runtime library is not found
+      Alternatively, configure an OpenAI-compatible embedding API in the machine-local
+      ~/.config/canopy/config.toml [embedding] section; no local model is loaded.
+      Keyword search works without either provider. If the ONNX Runtime library is not found
       automatically (e.g. Linuxbrew or a non-standard prefix), point canopy at it:
         export CANOPY_ONNXRUNTIME_DIR="#{formula_opt_lib("onnxruntime")}"
 
