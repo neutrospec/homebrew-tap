@@ -1,0 +1,86 @@
+# Source of truth for Formula/cuttle.rb in the neutrospec/homebrew-tap tap.
+# At each release this file is copied into the tap with `url` naming the new
+# tag and `sha256` set to that tag tarball's checksum; a tag's tarball cannot
+# contain its own checksum, so the value here is a placeholder until then.
+# Design: docs/design/0006-packaging-paths-and-lifecycle.md, D8.
+class Cuttle < Formula
+  desc "Explicit HTTP and HTTPS forward proxy with rule-based routing"
+  homepage "https://github.com/neutrospec/cuttle"
+  url "https://github.com/neutrospec/cuttle/archive/refs/tags/v0.1.0.tar.gz"
+  sha256 "82d4645e773e5304ef1ebdb75b501fb4d1c57a7f4e93fb36856b074e34efaa6a"
+  license "MIT"
+  head "https://github.com/neutrospec/cuttle.git", branch: "main"
+
+  depends_on "go" => :build
+  depends_on :macos
+
+  # The test talks to cuttle over loopback TCP. `fetch` downloads the Go
+  # modules with network access; `install` then builds offline.
+  allow_network_access! :test
+
+  def fetch
+    system "go", "mod", "download"
+  end
+
+  def install
+    ENV["CGO_ENABLED"] = "0"
+    system "go", "build", *std_go_args(ldflags: "-X main.version=#{version}"), "./cmd/cuttle"
+  end
+
+  def caveats
+    <<~EOS
+      Configuration: ~/.config/cuttle/config.toml (created on first start)
+      Admin UI:      http://127.0.0.1:3129/ after `cuttle admin passwd`
+      Paths:         `cuttle paths`
+      Non-default XDG_* values must also be set for the service in
+        $HOMEBREW_USER_CONFIG_HOME/services/cuttle.env
+      Run `brew services stop cuttle` before `brew uninstall cuttle`;
+        uninstalling does not stop the service.
+      Uninstalling leaves ~/.config/cuttle, ~/.local/share/cuttle, and
+        ~/.local/state/cuttle in place.
+    EOS
+  end
+
+  service do
+    run [opt_bin/"cuttle", "serve"]
+    keep_alive true
+    process_type :interactive
+    stop_timeout 15
+    log_path var/"log/cuttle.log"
+    error_log_path var/"log/cuttle.log"
+  end
+
+  test do
+    port = free_port
+    runtime_dir = testpath/"run"
+    runtime_dir.mkpath
+    runtime_dir.chmod 0700
+    ENV["XDG_RUNTIME_DIR"] = runtime_dir.to_s
+    (testpath/".config/cuttle/config.toml").write <<~TOML
+      name = "cuttle-test"
+      [proxy]
+      listen = ["127.0.0.1:#{port}"]
+      default = "block"
+      [admin]
+      listen = ""
+    TOML
+    assert_match "config.toml: ok, 0 warning(s)", shell_output("#{bin}/cuttle check")
+
+    # A blocked CONNECT is answered 403 without any outbound connection.
+    with_test_process bin/"cuttle", "serve" do
+      status_line = nil
+      20.times do
+        sleep 0.5
+        status_line = TCPSocket.open("127.0.0.1", port) do |socket|
+          socket.write "CONNECT blocked.invalid:443 HTTP/1.1\r\nHost: blocked.invalid:443\r\n\r\n"
+          socket.gets
+        end
+        break
+      rescue Errno::ECONNREFUSED
+        next
+      end
+      assert_match %r{\AHTTP/1\.1 403 }, status_line.to_s
+    end
+    assert_match "cuttle #{version}", shell_output("#{bin}/cuttle version")
+  end
+end
