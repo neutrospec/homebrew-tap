@@ -6,8 +6,8 @@
 class Cuttle < Formula
   desc "Explicit HTTP and HTTPS forward proxy with rule-based routing"
   homepage "https://github.com/neutrospec/cuttle"
-  url "https://github.com/neutrospec/cuttle/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "82d4645e773e5304ef1ebdb75b501fb4d1c57a7f4e93fb36856b074e34efaa6a"
+  url "https://github.com/neutrospec/cuttle/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "d9457b40f0a454200780b1d9e06cc7bc92e1a1723df16797e63789107f3a0b35"
   license "MIT"
   head "https://github.com/neutrospec/cuttle.git", branch: "main"
 
