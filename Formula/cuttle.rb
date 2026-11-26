@@ -1,8 +1,10 @@
-# Source of truth for Formula/cuttle.rb in the neutrospec/homebrew-tap tap.
-# At each release this file is copied into the tap with `url` naming the new
-# tag and `sha256` set to that tag tarball's checksum; a tag's tarball cannot
-# contain its own checksum, so the value here is a placeholder until then.
-# Design: docs/design/0006-packaging-paths-and-lifecycle.md, D8.
+# Formula/cuttle.rb in the neutrospec/homebrew-tap tap is a copy of
+# packaging/homebrew/cuttle.rb in neutrospec/cuttle; change the source file
+# and copy it. A release copy sets `url` and `sha256` for the new tag, while
+# the source file keeps a placeholder checksum because a tag's tarball cannot
+# contain its own. `brew pr-pull` adds the tap's `bottle do` block; the source
+# file never has one.
+# Design: neutrospec/cuttle docs/design/0006-packaging-paths-and-lifecycle.md, D8.
 class Cuttle < Formula
   desc "Explicit HTTP and HTTPS forward proxy with rule-based routing"
   homepage "https://github.com/neutrospec/cuttle"
