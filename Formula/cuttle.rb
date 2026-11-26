@@ -13,6 +13,13 @@ class Cuttle < Formula
   license "MIT"
   head "https://github.com/neutrospec/cuttle.git", branch: "main"
 
+  bottle do
+    root_url "https://github.com/neutrospec/homebrew-tap/releases/download/cuttle-0.2.0"
+    rebuild 1
+    sha256 cellar: :any_skip_relocation, arm64_tahoe:   "5b5e766fe29f69c343ec0242c98fb83dd35b3f0312366acc1c3dd72a6e726a36"
+    sha256 cellar: :any_skip_relocation, arm64_sequoia: "2272ee9ddc708d96d30655f7858fcfe8f38d2d7001463289a4189684c903f5f3"
+  end
+
   depends_on "go" => :build
   depends_on :macos
 
