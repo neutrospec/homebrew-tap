@@ -1,0 +1,104 @@
+name: install check
+
+# Reproduces an install on another computer after publish.yml: on a clean
+# GitHub-hosted runner, `brew install neutrospec/tap/cuttle` from main must
+# pour a bottle without installing go or building anything, `cuttle version`
+# must print the release version, and `brew test` must pass. macos-15 and
+# macos-26 pour their own tags. xcode-27 runs macOS 27, newer than every
+# bottle tag, and must pour the newest older one. Keep bottle_tag in step
+# with the tests.yml matrix.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version that `cuttle version` must print, such as 0.2.0
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            bottle_tag: arm64_sequoia
+          - os: macos-26
+            bottle_tag: arm64_tahoe
+          - os: xcode-27
+            bottle_tag: arm64_tahoe
+    runs-on: ${{ matrix.os }}
+    permissions:
+      attestations: read
+      contents: read
+    env:
+      BOTTLE_TAG: ${{ matrix.bottle_tag }}
+      HOMEBREW_NO_COLOR: "1"
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Prepare Homebrew
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must look like 0.2.0."
+            exit 1
+          fi
+          sw_vers
+          brew update
+          if brew list --formula go >/dev/null 2>&1; then
+            echo "::notice::Removing the image's Homebrew go so that a build cannot use it."
+            brew uninstall --formula --ignore-dependencies go
+          fi
+          brew config
+          brew list --formula -1 | sort >"$RUNNER_TEMP/before.txt"
+
+      - name: Install cuttle
+        run: brew install neutrospec/tap/cuttle 2>&1 | tee "$RUNNER_TEMP/install.log"
+
+      - name: Check that a bottle was poured and nothing was built
+        run: |
+          # The log names the bottle file, such as cuttle-0.2.0.arm64_tahoe.bottle.tar.gz.
+          pour="Pouring cuttle--?${VERSION//./\\.}\\.${BOTTLE_TAG}\\.bottle\\."
+          grep -E "$pour" "$RUNNER_TEMP/install.log"
+          receipt="$(brew --prefix)/opt/cuttle/INSTALL_RECEIPT.json"
+          jq '{poured_from_bottle, built_as_bottle, built_on}' "$receipt"
+          jq -e '.poured_from_bottle == true and .built_as_bottle == true' "$receipt"
+          brew list --formula -1 | sort >"$RUNNER_TEMP/after.txt"
+          added="$(comm -13 "$RUNNER_TEMP/before.txt" "$RUNNER_TEMP/after.txt")"
+          if [[ "$added" != cuttle ]]; then
+            echo "::error::Formulae installed besides cuttle: $added"
+            exit 1
+          fi
+          if brew list --formula go >/dev/null 2>&1; then
+            echo "::error::go was installed, so cuttle was built from source."
+            exit 1
+          fi
+
+      - name: Check the version
+        run: |
+          out="$("$(brew --prefix)/bin/cuttle" version)"
+          if [[ "$out" != "cuttle $VERSION ("* ]]; then
+            echo "::error::cuttle version printed '$out', not cuttle $VERSION."
+            exit 1
+          fi
+
+      - run: brew test neutrospec/tap/cuttle
+
+      # Users who set HOMEBREW_VERIFY_ATTESTATIONS get the bottle only with a
+      # valid build provenance attestation from this repository.
+      - name: Verify the bottle attestation
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_VERIFY_ATTESTATIONS: "1"
+        run: |
+          brew reinstall neutrospec/tap/cuttle 2>&1 | tee "$RUNNER_TEMP/reinstall.log"
+          if grep -F "Skipping attestation verification" "$RUNNER_TEMP/reinstall.log"; then
+            echo "::error::Homebrew skipped the attestation check."
+            exit 1
+          fi
+          pour="Pouring cuttle--?${VERSION//./\\.}\\.${BOTTLE_TAG}\\.bottle\\."
+          grep -E "$pour" "$RUNNER_TEMP/reinstall.log"

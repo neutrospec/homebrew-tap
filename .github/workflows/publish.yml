@@ -1,0 +1,171 @@
+name: brew pr-pull
+
+# Publishes the bottles that tests.yml built for a cuttle pull request, from
+# Homebrew's `brew tap-new` template, with the attestation made before
+# anything is uploaded, as homebrew-core does. Dispatch it by hand with the
+# pull request number and the head commit that tests.yml passed for. It
+# uploads the bottles to this repository's GitHub Releases under the tag
+# cuttle-<version>, pushes the pull request's commits and the bottle commit
+# to main, and deletes the pull request branch, which leaves the pull
+# request closed.
+#
+# brew pr-pull and brew pr-upload load the pull request's formula in a job
+# that can write to this repository, so the first step accepts only a
+# bump-cuttle-<version> branch of this repository whose every commit changes
+# Formula/cuttle.rb alone, at the head commit given, with a green tests.yml
+# run for that commit.
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Pull request number
+        required: true
+      head_sha:
+        description: Pull request head commit SHA (40 hex digits) that tests.yml passed for
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  pr-pull:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # find the tests.yml run and download its bottles
+      attestations: write # store the bottles' build provenance
+      checks: read # match the pull request's check suites to tests.yml
+      contents: write # create the release, upload bottles, push main, delete the branch
+      id-token: write # sign the build provenance
+      issues: read # brew pr-pull lists open issues by label
+      pull-requests: read # pull request commits, files, labels, and reviews
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@ceec4e8419bb3c97ce96e9dda7738499ed5f869d # 2026.11.14.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up git
+        id: git_setup
+        uses: Homebrew/actions/git-user-config@ceec4e8419bb3c97ce96e9dda7738499ed5f869d # 2026.11.14.1
+
+      - name: Check the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          if [[ ! "$PULL_REQUEST" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::pull_request must be a pull request number."
+            exit 1
+          fi
+          expected_sha="$(tr '[:upper:]' '[:lower:]' <<<"$EXPECTED_HEAD_SHA")"
+          if [[ ! "$expected_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::head_sha must be a full commit SHA of 40 hex digits."
+            exit 1
+          fi
+
+          pr_json="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST")"
+          state="$(jq -r .state <<<"$pr_json")"
+          base_ref="$(jq -r .base.ref <<<"$pr_json")"
+          head_sha="$(jq -r .head.sha <<<"$pr_json")"
+          head_repo="$(jq -r .head.repo.full_name <<<"$pr_json")"
+          head_ref="$(jq -r .head.ref <<<"$pr_json")"
+          changed_files="$(jq -r .changed_files <<<"$pr_json")"
+          if [[ "$state" != open || "$base_ref" != main ]]; then
+            echo "::error::Pull request #$PULL_REQUEST is $state against $base_ref, not open against main."
+            exit 1
+          fi
+          if [[ "$head_sha" != "$expected_sha" ]]; then
+            echo "::error::Pull request #$PULL_REQUEST is at $head_sha, not $expected_sha."
+            exit 1
+          fi
+          # A fork's author could change the code that this job runs.
+          if [[ "$head_repo" != "$GITHUB_REPOSITORY" ]]; then
+            echo "::error::The pull request comes from $head_repo, not from a branch of $GITHUB_REPOSITORY."
+            exit 1
+          fi
+          if [[ ! "$head_ref" =~ ^bump-cuttle-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The pull request branch is $head_ref, not bump-cuttle-<version>."
+            exit 1
+          fi
+
+          # Formula/cuttle.rb alone, in total and in every commit: nothing else
+          # reaches main, and tests.yml ran as it is on main, so its artifacts
+          # are the bottles brew test-bot built. canopy builds from source by design.
+          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST/files" \
+            --jq '.[] | "\(.status) \(.filename)"')"
+          if [[ "$changed_files" != 1 || "$files" != "modified Formula/cuttle.rb" ]]; then
+            echo "::error::The pull request must change only Formula/cuttle.rb; it changes: ${files//$'\n'/, }"
+            exit 1
+          fi
+          commits="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST/commits" --jq '.[].sha')"
+          while read -r sha; do
+            commit_files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha" --jq '.files[].filename')"
+            if [[ "$commit_files" != Formula/cuttle.rb ]]; then
+              echo "::error::Commit $sha must change only Formula/cuttle.rb; it changes: ${commit_files//$'\n'/, }"
+              exit 1
+            fi
+          done <<<"$commits"
+
+          # brew pr-pull takes the newest completed run, failed or not.
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?event=pull_request&head_sha=$head_sha" \
+            --jq '(.workflow_runs[0] // {}) | "\(.status // "missing")/\(.conclusion // "none")"')"
+          if [[ "$run" != completed/success ]]; then
+            echo "::error::The newest tests.yml run for $head_sha is $run (status/conclusion), not completed/success."
+            exit 1
+          fi
+
+          {
+            echo "head_sha=$head_sha"
+            echo "head_ref=$head_ref"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Pull bottles
+        id: pr-pull
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_GIT_COMMITTER_NAME: ${{ steps.git_setup.outputs.name }}
+          HOMEBREW_GIT_COMMITTER_EMAIL: ${{ steps.git_setup.outputs.email }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
+        run: |
+          brew pr-pull --no-upload --debug --retain-bottle-dir --tap="$GITHUB_REPOSITORY" \
+            --head-sha="$HEAD_SHA" "$PULL_REQUEST"
+
+      - name: Generate build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: "${{ steps.pr-pull.outputs.bottle_path }}/*.tar.gz"
+
+      - name: Upload bottles to GitHub Releases
+        working-directory: ${{ steps.pr-pull.outputs.bottle_path }}
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_GIT_COMMITTER_NAME: ${{ steps.git_setup.outputs.name }}
+          HOMEBREW_GIT_COMMITTER_EMAIL: ${{ steps.git_setup.outputs.email }}
+        run: brew pr-upload --debug
+
+      - name: Push commits
+        uses: Homebrew/actions/git-try-push@ceec4e8419bb3c97ce96e9dda7738499ed5f869d # 2026.11.14.1
+        with:
+          directory: ${{ steps.set-up-homebrew.outputs.repository-path }}
+          branch: main
+
+      # The first step accepted only a bump-cuttle-<version> branch of this
+      # repository. The lease deletes it only while it still points at the
+      # published commit.
+      - name: Delete the pull request branch
+        working-directory: ${{ steps.set-up-homebrew.outputs.repository-path }}
+        env:
+          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: git push --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" origin ":refs/heads/$HEAD_REF"
